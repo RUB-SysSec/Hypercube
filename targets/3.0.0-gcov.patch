@@ -1,0 +1,100 @@
+--- qemu-3.0.0/hw/audio/intel-hda.c	2018-08-14 19:10:34.000000000 +0000
++++ hw/audio/intel-hda.c	               2021-03-04 12:22:08.234924778 +0000
+@@ -951,6 +951,8 @@
+             d->repeat_count = 0;
+         }
+     }
++    if(reg->offset == 0)
++        return;
+     assert(reg->offset != 0);
+ 
+     addr = intel_hda_reg_addr(d, reg);
+--- qemu-3.0.0/block/block-backend.c	2018-08-14 19:10:34.000000000 +0000
++++ block/block-backend.c	          2021-03-04 11:43:56.455153171 +0000
+@@ -654,11 +654,16 @@
+     return NULL;
+ }
+ 
++void __gcov_flush(void);
++
+ /*
+  * Return the BlockDriverState attached to @blk if any, else null.
+  */
+ BlockDriverState *blk_bs(BlockBackend *blk)
+ {
++    if(blk == NULL || blk->root == NULL){
++        __gcov_flush();
++    }
+     return blk->root ? blk->root->bs : NULL;
+ }
+ 
+--- qemu-3.0.0/vl.c	2018-08-14 19:10:35.000000000 +0000
++++ vl.c	          2021-03-04 11:50:40.673290876 +0000
+@@ -31,6 +31,48 @@
+ #include "qemu/uuid.h"
+ #include "sysemu/seccomp.h"
+ 
++void __gcov_flush(void);
++void fault_handler(int signo, siginfo_t *info, void *extra);
++void setHandler(void (*handler)(int,siginfo_t *,void *));
++
++void fault_handler(int signo, siginfo_t *info, void *extra){
++    __gcov_flush();
++    printf("Gcov fault handler called (Signal: %d)\n", signo);
++    fflush(stdout);
++    exit(0);
++}
++
++void setHandler(void (*handler)(int,siginfo_t *,void *)){
++    struct sigaction action;
++    action.sa_flags = SA_SIGINFO;
++    action.sa_sigaction = handler;
++
++    if (sigaction(SIGFPE, &action, NULL) == -1) {
++            perror("sigfpe: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGSEGV, &action, NULL) == -1) {
++            perror("sigsegv: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGILL, &action, NULL) == -1) {
++            perror("sigill: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGBUS, &action, NULL) == -1) {
++            perror("sigbus: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGABRT, &action, NULL) == -1) {
++            perror("sigabrt: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGTERM, &action, NULL) == -1) {
++            perror("sigterm: sigaction");
++            _exit(1);
++    }
++}
++
+ #ifdef CONFIG_SDL
+ #if defined(__APPLE__) || defined(main)
+ #include <SDL.h>
+@@ -2952,6 +2994,8 @@
+ 
+     module_call_init(MODULE_INIT_TRACE);
+ 
++    setHandler(fault_handler);
++
+     qemu_init_cpu_list();
+     qemu_init_cpu_loop();
+ 
+@@ -4059,6 +4103,9 @@
+     }
+     trace_init_file(trace_file);
+ 
++        setHandler(fault_handler);
++
++
+     /* Open the logfile at this point and set the log mask if necessary.
+      */
+     if (log_file) {

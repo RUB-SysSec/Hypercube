@@ -1,0 +1,79 @@
+--- qemu-4.0.0/block/block-backend.c	2019-04-23 18:14:45.000000000 +0000
++++ block/block-backend.c	          2021-03-04 11:47:07.978724382 +0000
+@@ -662,11 +662,16 @@
+     return NULL;
+ }
+ 
++void __gcov_flush(void);
++
+ /*
+  * Return the BlockDriverState attached to @blk if any, else null.
+  */
+ BlockDriverState *blk_bs(BlockBackend *blk)
+ {
++    if(blk == NULL || blk->root == NULL){
++        __gcov_flush();
++    }
+     return blk->root ? blk->root->bs : NULL;
+ }
+ 
+--- qemu-4.0.0/vl.c	2019-04-23 18:14:46.000000000 +0000
++++ vl.c	          2021-03-04 11:49:52.273586366 +0000
+@@ -131,6 +131,48 @@
+ 
+ #define MAX_VIRTIO_CONSOLES 1
+ 
++void __gcov_flush(void);
++void fault_handler(int signo, siginfo_t *info, void *extra);
++void setHandler(void (*handler)(int,siginfo_t *,void *));
++
++void fault_handler(int signo, siginfo_t *info, void *extra){
++    __gcov_flush();
++    printf("Gcov fault handler called (Signal: %d)\n", signo);
++    fflush(stdout);
++    exit(0);
++}
++
++void setHandler(void (*handler)(int,siginfo_t *,void *)){
++    struct sigaction action;
++    action.sa_flags = SA_SIGINFO;
++    action.sa_sigaction = handler;
++
++    if (sigaction(SIGFPE, &action, NULL) == -1) {
++            perror("sigfpe: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGSEGV, &action, NULL) == -1) {
++            perror("sigsegv: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGILL, &action, NULL) == -1) {
++            perror("sigill: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGBUS, &action, NULL) == -1) {
++            perror("sigbus: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGABRT, &action, NULL) == -1) {
++            perror("sigabrt: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGTERM, &action, NULL) == -1) {
++            perror("sigterm: sigaction");
++            _exit(1);
++    }
++}
++
+ static const char *data_dir[16];
+ static int data_dir_idx;
+ const char *bios_name = NULL;
+@@ -3035,6 +3077,8 @@
+ 
+     module_call_init(MODULE_INIT_QOM);
+ 
++    setHandler(fault_handler);
++
+     qemu_add_opts(&qemu_drive_opts);
+     qemu_add_drive_opts(&qemu_legacy_drive_opts);
+     qemu_add_drive_opts(&qemu_common_drive_opts);

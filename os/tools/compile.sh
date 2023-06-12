@@ -1,0 +1,2 @@
+#gcc -m32 -fsanitize=address -g gen_stream.c ../tesseract/handler.c ../tesseract/decompiler.c ../tesseract/dict.c ../tesseract/state.c -o test
+gcc -m32 -O3 gen_stream.c ../tesseract/handler.c ../tesseract/decompiler.c ../tesseract/dict.c ../tesseract/state.c -o tesseract_tool

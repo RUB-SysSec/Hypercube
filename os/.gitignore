@@ -1,0 +1,6 @@
+grub/bios/       
+grub/efi/        
+grub/efi_app/
+iso/
+misc/crash.hexa
+isofiles/

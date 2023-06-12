@@ -1,0 +1,90 @@
+--- qemu-2.5.0/hw/audio/intel-hda.c	2015-12-16 22:04:48.000000000 +0000
++++ hw/audio/intel-hda.c	2021-03-04 14:49:59.950799198 +0000
+@@ -955,6 +955,8 @@
+             d->repeat_count = 0;
+         }
+     }
++    if(reg->offset == 0)
++        return;
+     assert(reg->offset != 0);
+ 
+     addr = intel_hda_reg_addr(d, reg);
+--- qemu-2.5.0/block/block-backend.c	2015-12-16 22:04:48.000000000 +0000
++++ block/block-backend.c	2021-03-04 14:49:28.646848466 +0000
+@@ -261,11 +261,16 @@
+     return NULL;
+ }
+ 
++void __gcov_flush(void);
++
+ /*
+  * Return the BlockDriverState attached to @blk if any, else null.
+  */
+ BlockDriverState *blk_bs(BlockBackend *blk)
+ {
++    if(blk == NULL){
++        __gcov_flush();
++    }
+     return blk->bs;
+ }
+ 
+--- qemu-2.5.0/vl.c	2015-12-16 22:04:53.000000000 +0000
++++ vl.c	2021-03-04 14:48:49.170910441 +0000
+@@ -38,6 +38,48 @@
+ #include <libvdeplug.h>
+ #endif
+ 
++#include <stdio.h>
++void __gcov_flush(void);
++void fault_handler(int signo, siginfo_t *info, void *extra);
++void setHandler(void (*handler)(int,siginfo_t *,void *));
++void fault_handler(int signo, siginfo_t *info, void *extra){
++    __gcov_flush();
++    printf("Gcov fault handler called (Signal: %d)\n", signo);
++    fflush(stdout);
++    exit(0);
++}
++
++void setHandler(void (*handler)(int,siginfo_t *,void *)){
++    struct sigaction action;
++    action.sa_flags = SA_SIGINFO;
++    action.sa_sigaction = handler;
++
++    if (sigaction(SIGFPE, &action, NULL) == -1) {
++            perror("sigfpe: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGSEGV, &action, NULL) == -1) {
++            perror("sigsegv: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGILL, &action, NULL) == -1) {
++            perror("sigill: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGBUS, &action, NULL) == -1) {
++            perror("sigbus: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGABRT, &action, NULL) == -1) {
++            perror("sigabrt: sigaction");
++            _exit(1);
++    }
++    if (sigaction(SIGTERM, &action, NULL) == -1) {
++            perror("sigterm: sigaction");
++            _exit(1);
++    }
++}
++
+ #ifdef CONFIG_SDL
+ #if defined(__APPLE__) || defined(main)
+ #include <SDL.h>
+@@ -3002,6 +3044,8 @@
+     Error *main_loop_err = NULL;
+     Error *err = NULL;
+ 
++    setHandler(fault_handler);
++
+     qemu_init_cpu_loop();
+     qemu_mutex_lock_iothread();
+ 
